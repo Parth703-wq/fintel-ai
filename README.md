@@ -455,12 +455,12 @@ Developed for enterprise-grade invoice processing and compliance monitoring.
 ## 📧 Contact
 
 For questions, issues, or collaboration:
-- **GitHub Issues**: [Create an issue](https://github.com/your-username/fintel-ai/issues)
-- **Email**: your-email@example.com
+- 
+- **Email**: parth.hindiya@gmail.com
 
 ---
 
-## 🙏 Acknowledgments
+##  Acknowledgments
 
 - Google Gemini AI for advanced OCR capabilities
 - RapidAPI for GST verification services
