@@ -9,7 +9,7 @@ import re
 
 class GSTVerifier:
     def __init__(self):
-        self.api_key = "7bc4a1b959msh1e1dc9c6075cdc8p1ff4e0jsn178b4d51fccd"
+        self.api_key = "8900b371dmshae679431887f9fbfp1282bfjsn2f32a6744755"
         self.api_host = "gst-insights-api1.p.rapidapi.com"
         self.base_url = f"https://{self.api_host}/gstin"
     
@@ -108,8 +108,14 @@ class GSTVerifier:
             
             response = requests.get(url, headers=headers, timeout=10)
             
+            # Debug logging
+            print(f"🔍 GST API Response for {gst_number}:")
+            print(f"   Status Code: {response.status_code}")
+            print(f"   Response Text: {response.text[:500]}")  # First 500 chars
+            
             if response.status_code == 200:
                 data = response.json()
+                print(f"   Parsed Data: {data}")
                 
                 if data.get("success"):
                     gst_data = data.get("data", {})
@@ -133,6 +139,7 @@ class GSTVerifier:
                         "verification_date": None
                     }
                 else:
+                    print(f"   ❌ API returned success=False")
                     return {
                         "success": False,
                         "is_valid": False,
@@ -141,6 +148,7 @@ class GSTVerifier:
                     }
             
             elif response.status_code == 404:
+                print(f"   ❌ 404 - GST not found")
                 return {
                     "success": False,
                     "is_valid": False,
@@ -149,6 +157,7 @@ class GSTVerifier:
                 }
             
             elif response.status_code == 429:
+                print(f"   ❌ 429 - Rate limit exceeded")
                 return {
                     "success": False,
                     "is_valid": None,
@@ -157,6 +166,7 @@ class GSTVerifier:
                 }
             
             else:
+                print(f"   ❌ Unexpected status code: {response.status_code}")
                 return {
                     "success": False,
                     "is_valid": None,

@@ -188,7 +188,7 @@ FINTEL AI exhibits key characteristics of an **Autonomous AI Agent**:
 
 #### 1️⃣ Clone Repository
 ```bash
-git clone https://github.com/your-username/fintel-ai.git
+git clone https://github.com/Parth703-wq/fintel-ai.git
 cd fintel-ai
 ```
 

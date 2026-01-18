@@ -206,7 +206,29 @@ class FintelDatabase:
                         'description': f"Amount ₹{current_amount} is 3x higher than vendor average ₹{avg_amount:.2f}"
                     })
         
-        # 5. Check for same HSN code with very different price
+        # 5. Check for invalid HSN/SAC codes
+        hsn_sac_verification = invoice_data.get('hsn_sac_verification', [])
+        if hsn_sac_verification:
+            invalid_codes = [v for v in hsn_sac_verification if not v.get('is_valid')]
+            if invalid_codes:
+                for invalid in invalid_codes:
+                    anomalies.append({
+                        'type': 'INVALID_HSN_SAC',
+                        'severity': 'HIGH',
+                        'description': f"Invalid HSN/SAC code: {invalid.get('code')} - {invalid.get('error', 'Not found in GST database')}"
+                    })
+        
+        # 5b. Check for GST rate mismatches in line items
+        line_items_verification = invoice_data.get('hsn_sac_line_items_verification')
+        if line_items_verification and line_items_verification.get('rate_mismatches'):
+            for mismatch in line_items_verification['rate_mismatches']:
+                anomalies.append({
+                    'type': 'HSN_GST_RATE_MISMATCH',
+                    'severity': 'HIGH',
+                    'description': f"GST rate mismatch for {mismatch['item']}: HSN {mismatch['hsn_code']} should have {mismatch['actual_rate']}% but invoice shows {mismatch['extracted_rate']}%"
+                })
+        
+        # 6. Check for same HSN code with very different price
         hsn_codes = invoice_data.get('hsn_sac_codes', [])
         if hsn_codes:
             for hsn in hsn_codes[:3]:  # Check first 3 HSN codes
@@ -259,13 +281,22 @@ class FintelDatabase:
         return list(self.invoices.aggregate(pipeline))
     
     def get_invoice_history(self, limit: int = 50) -> List[Dict]:
-        """Get recent invoice history"""
+        """Get recent invoice history with anomalies"""
         invoices = list(self.invoices.find().sort('uploadDate', DESCENDING).limit(limit))
         
-        # Convert ObjectId to string
+        # Convert ObjectId to string and attach anomalies
         for inv in invoices:
+            invoice_id = inv['_id']
             inv['_id'] = str(inv['_id'])
             inv['uploadDate'] = inv['uploadDate'].isoformat() if inv.get('uploadDate') else None
+            
+            # Fetch anomalies for this invoice
+            anomalies = list(self.anomalies.find({'invoiceId': invoice_id}))
+            for anomaly in anomalies:
+                anomaly['_id'] = str(anomaly['_id'])
+                if anomaly.get('detectedDate'):
+                    anomaly['detectedDate'] = anomaly['detectedDate'].isoformat()
+            inv['anomalies'] = anomalies
         
         return invoices
     
@@ -281,7 +312,7 @@ class FintelDatabase:
         return vendors
     
     def get_anomalies(self, severity: Optional[str] = None, limit: int = 50) -> List[Dict]:
-        """Get detected anomalies"""
+        """Get detected anomalies with vendor information"""
         query = {}
         if severity:
             query['severity'] = severity
@@ -291,6 +322,17 @@ class FintelDatabase:
         for anomaly in anomalies:
             anomaly['_id'] = str(anomaly['_id'])
             anomaly['detectedDate'] = anomaly['detectedDate'].isoformat() if anomaly.get('detectedDate') else None
+            
+            # Fetch vendor name from invoice
+            if anomaly.get('invoiceId'):
+                invoice = self.invoices.find_one({'_id': anomaly['invoiceId']})
+                if invoice:
+                    anomaly['vendor_name'] = invoice.get('vendorName', 'Unknown')
+                    anomaly['invoice_number'] = invoice.get('invoiceNumber', anomaly.get('invoiceNumber', 'N/A'))
+                else:
+                    anomaly['vendor_name'] = 'Unknown'
+            else:
+                anomaly['vendor_name'] = 'Unknown'
         
         return anomalies
     
@@ -334,13 +376,13 @@ class FintelDatabase:
         pipeline = [
             {
                 '$match': {
-                    'detectedAt': {'$gte': start_date, '$lte': end_date}
+                    'detectedDate': {'$gte': start_date, '$lte': end_date}
                 }
             },
             {
                 '$group': {
                     '_id': {
-                        'date': {'$dateToString': {'format': '%Y-%m-%d', 'date': '$detectedAt'}},
+                        'date': {'$dateToString': {'format': '%Y-%m-%d', 'date': '$detectedDate'}},
                         'type': '$anomalyType'
                     },
                     'count': {'$sum': 1}
@@ -366,16 +408,19 @@ class FintelDatabase:
                     'duplicates': 0,
                     'invalidGst': 0,
                     'missingGst': 0,
+                    'hsnAnomalies': 0,
                     'total': 0
                 }
             
             # Map anomaly types to keys
             if anomaly_type == 'DUPLICATE_INVOICE':
-                trends_by_date[date]['duplicates'] = count
-            elif anomaly_type == 'INVALID_GST':
-                trends_by_date[date]['invalidGst'] = count
+                trends_by_date[date]['duplicates'] += count
+            elif anomaly_type in ['INVALID_GST', 'GST_VENDOR_MISMATCH']:
+                trends_by_date[date]['invalidGst'] += count
             elif anomaly_type == 'MISSING_GST':
-                trends_by_date[date]['missingGst'] = count
+                trends_by_date[date]['missingGst'] += count
+            elif anomaly_type in ['INVALID_HSN_SAC', 'HSN_GST_RATE_MISMATCH', 'HSN_PRICE_DEVIATION', 'UNUSUAL_AMOUNT']:
+                trends_by_date[date]['hsnAnomalies'] += count
             
             trends_by_date[date]['total'] += count
         
@@ -392,6 +437,7 @@ class FintelDatabase:
                     'duplicates': 0,
                     'invalidGst': 0,
                     'missingGst': 0,
+                    'hsnAnomalies': 0,
                     'total': 0
                 })
             current_date += timedelta(days=1)

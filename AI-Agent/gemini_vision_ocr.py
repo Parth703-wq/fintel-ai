@@ -12,7 +12,7 @@ import re
 from pathlib import Path
 
 class GeminiVisionOCR:
-    def __init__(self, api_key="AIzaSyB7zJbF7Nx_KP4oIOZCGc5P84WN4RHO14M"):
+    def __init__(self, api_key="AIzaSyBOZvc6xKkPH4ad7dpuug-ICfQsUT5LChg"):
         """Initialize Gemini Vision with API key"""
         print("🚀 Initializing Gemini Vision OCR...")
         genai.configure(api_key=api_key)

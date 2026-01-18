@@ -220,22 +220,6 @@ const Login = () => {
             </Button>
           </form>
 
-          <div className="mt-6 p-4 bg-muted rounded-lg">
-            <p className="text-sm font-semibold mb-2 text-center">Demo Credentials:</p>
-            <div className="space-y-2 text-xs">
-              <div>
-                <p className="font-medium">Admin:</p>
-                <p>Email: admin@fintel.ai</p>
-                <p>Password: admin123</p>
-              </div>
-              <div>
-                <p className="font-medium">User:</p>
-                <p>Email: user@fintel.ai</p>
-                <p>Password: user123</p>
-              </div>
-            </div>
-          </div>
-
           <p className="mt-6 text-center text-sm text-muted-foreground">
             Powered by FINTEL AI × MongoDB
           </p>

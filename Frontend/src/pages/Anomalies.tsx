@@ -44,23 +44,31 @@ const Anomalies = () => {
           let type: Anomaly['type'] = 'duplicate';
           let severity: Anomaly['severity'] = 'medium';
           
-          // Map anomaly types
-          if (anomaly.anomaly_type === 'DUPLICATE_INVOICE') {
+          // Map anomaly types (check both anomalyType and anomaly_type for compatibility)
+          const anomalyType = anomaly.anomalyType || anomaly.anomaly_type;
+          
+          if (anomalyType === 'DUPLICATE_INVOICE') {
             type = 'duplicate';
             severity = 'high';
-          } else if (anomaly.anomaly_type === 'INVALID_GST') {
+          } else if (anomalyType === 'INVALID_GST') {
             type = 'gst';
             severity = 'high';
-          } else if (anomaly.anomaly_type === 'MISSING_GST') {
+          } else if (anomalyType === 'MISSING_GST') {
             type = 'gst';
             severity = 'high';
-          } else if (anomaly.anomaly_type === 'GST_VENDOR_MISMATCH') {
+          } else if (anomalyType === 'GST_VENDOR_MISMATCH') {
             type = 'gst';
             severity = 'high';
-          } else if (anomaly.anomaly_type === 'UNUSUAL_AMOUNT') {
+          } else if (anomalyType === 'INVALID_HSN_SAC') {
+            type = 'hsn';
+            severity = 'high';
+          } else if (anomalyType === 'HSN_GST_RATE_MISMATCH') {
+            type = 'hsn';
+            severity = 'high';
+          } else if (anomalyType === 'UNUSUAL_AMOUNT') {
             type = 'price';
             severity = 'medium';
-          } else if (anomaly.anomaly_type === 'HSN_PRICE_DEVIATION') {
+          } else if (anomalyType === 'HSN_PRICE_DEVIATION') {
             type = 'hsn';
             severity = 'medium';
           }
@@ -230,42 +238,54 @@ const Anomalies = () => {
         <Card className="p-6">
           <h3 className="text-lg font-semibold mb-4">Top Risky Vendors</h3>
           <div className="space-y-3">
-            <div className="flex items-center gap-4">
-              <div className="flex-1">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-medium">TechNova Pvt Ltd</span>
-                  <span className="text-sm text-destructive font-bold">Risk: 0.83</span>
+            {(() => {
+              // Group anomalies by vendor and count
+              const vendorAnomalies = anomalies.reduce((acc: any, anomaly) => {
+                const vendor = anomaly.vendor || 'Unknown';
+                if (!acc[vendor]) {
+                  acc[vendor] = { count: 0, highSeverity: 0 };
+                }
+                acc[vendor].count++;
+                if (anomaly.severity === 'high') acc[vendor].highSeverity++;
+                return acc;
+              }, {});
+
+              // Convert to array and sort by count
+              const topVendors = Object.entries(vendorAnomalies)
+                .map(([vendor, data]: [string, any]) => ({
+                  vendor,
+                  count: data.count,
+                  risk: Math.min(0.95, (data.count * 0.15) + (data.highSeverity * 0.2))
+                }))
+                .sort((a, b) => b.count - a.count)
+                .slice(0, 3);
+
+              if (topVendors.length === 0) {
+                return <p className="text-muted-foreground text-center py-4">No risky vendors found</p>;
+              }
+
+              return topVendors.map((vendor, index) => (
+                <div key={index} className="flex items-center gap-4">
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-medium">{vendor.vendor}</span>
+                      <span className={`text-sm font-bold ${vendor.risk > 0.6 ? 'text-destructive' : 'text-warning'}`}>
+                        Risk: {vendor.risk.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                      <div 
+                        className={`h-full ${vendor.risk > 0.6 ? 'bg-destructive' : 'bg-warning'}`} 
+                        style={{ width: `${vendor.risk * 100}%` }} 
+                      />
+                    </div>
+                  </div>
+                  <Badge variant={vendor.risk > 0.6 ? "destructive" : "secondary"}>
+                    {vendor.count} Anomal{vendor.count === 1 ? 'y' : 'ies'}
+                  </Badge>
                 </div>
-                <div className="h-2 bg-muted rounded-full overflow-hidden">
-                  <div className="h-full bg-destructive" style={{ width: "83%" }} />
-                </div>
-              </div>
-              <Badge variant="destructive">3 Anomalies</Badge>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="flex-1">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-medium">ABC Traders</span>
-                  <span className="text-sm text-warning font-bold">Risk: 0.52</span>
-                </div>
-                <div className="h-2 bg-muted rounded-full overflow-hidden">
-                  <div className="h-full bg-warning" style={{ width: "52%" }} />
-                </div>
-              </div>
-              <Badge variant="secondary">2 Anomalies</Badge>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="flex-1">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-medium">Metro Logistics</span>
-                  <span className="text-sm text-warning font-bold">Risk: 0.35</span>
-                </div>
-                <div className="h-2 bg-muted rounded-full overflow-hidden">
-                  <div className="h-full bg-warning" style={{ width: "35%" }} />
-                </div>
-              </div>
-              <Badge variant="secondary">1 Anomaly</Badge>
-            </div>
+              ));
+            })()}
           </div>
         </Card>
 

@@ -27,6 +27,7 @@ from gemini_vision_ocr import gemini_vision_ocr  # Gemini Vision OCR
 from ml_trainer import FintelMLTrainer
 from database import FintelDatabase
 from gst_verifier import gst_verifier
+from hsn_sac_verifier import hsn_sac_verifier  # HSN/SAC Verification
 
 # NEW: Import LangChain integration (optional)
 try:
@@ -73,7 +74,7 @@ if not ml_trainer.load_models():
 print("FINTEL AI Complete System ready!")
 
 # Configure Gemini AI
-GEMINI_API_KEY = "AIzaSyB7zJbF7Nx_KP4oIOZCGc5P84WN4RHO14M"
+GEMINI_API_KEY = "AIzaSyBOZvc6xKkPH4ad7dpuug-ICfQsUT5LChg"
 genai.configure(api_key=GEMINI_API_KEY)
 gemini_model = genai.GenerativeModel('gemini-2.5-flash')
 print("Gemini AI configured!")
@@ -306,6 +307,41 @@ async def upload_invoice_complete(file: UploadFile = File(...)):
         invoice_data['gst_verification'] = gst_verification_results
         invoice_data['gst_missing'] = gst_missing
         
+        # HSN/SAC Code Verification (Real Government Data)
+        hsn_sac_verification_results = []
+        line_items_verification = None
+        hsn_codes = enhanced_data.get('hsn_sac_codes', [])
+        line_items = ocr_result['structured_data'].get('line_items', [])
+        
+        # Method 1: Verify with line items (includes GST rate matching)
+        if line_items and len(line_items) > 0:
+            print(f"🔍 Verifying {len(line_items)} line items with HSN/SAC codes and GST rates...")
+            line_items_verification = hsn_sac_verifier.verify_with_line_items(line_items)
+            hsn_sac_verification_results = line_items_verification['verifications']
+            
+            print(f"   ✅ Valid codes: {line_items_verification['valid_codes']}")
+            print(f"   ❌ Invalid codes: {line_items_verification['invalid_codes']}")
+            print(f"   ⚠️  Rate mismatches: {line_items_verification['rate_mismatch_count']}")
+            
+            if line_items_verification['rate_mismatches']:
+                for mismatch in line_items_verification['rate_mismatches']:
+                    print(f"      ⚠️  {mismatch['item']}: HSN {mismatch['hsn_code']} - Expected {mismatch['actual_rate']}%, Got {mismatch['extracted_rate']}%")
+        
+        # Method 2: Verify all HSN codes (fallback if no line items)
+        elif hsn_codes and len(hsn_codes) > 0:
+            print(f"🔍 Verifying HSN/SAC codes: {hsn_codes}")
+            for code in hsn_codes:
+                if code and code != 'Unknown':
+                    verification = hsn_sac_verifier.verify_code(code)
+                    hsn_sac_verification_results.append(verification)
+                    print(f"   {'✅' if verification.get('is_valid') else '❌'} {code}: {verification.get('description', 'N/A')}")
+        else:
+            print("⚠️ No HSN/SAC codes found in invoice!")
+        
+        # Add HSN/SAC verification to invoice data
+        invoice_data['hsn_sac_verification'] = hsn_sac_verification_results
+        invoice_data['hsn_sac_line_items_verification'] = line_items_verification
+        
         # ML Anomaly Detection
         ml_features = extract_ml_features(invoice_data)
         ml_result = None
@@ -329,7 +365,10 @@ async def upload_invoice_complete(file: UploadFile = File(...)):
             'compliance_results': compliance_results,
             'ml_prediction': ml_result,
             'gst_verification': gst_verification_results,
-            'gst_missing': gst_missing
+            'gst_missing': gst_missing,
+            'hsn_sac_verification': hsn_sac_verification_results,
+            'hsn_sac_line_items_verification': line_items_verification,
+            'line_items': line_items
         }
         invoice_id = db.store_invoice(invoice_storage_data)
         
@@ -391,6 +430,15 @@ async def upload_invoice_complete(file: UploadFile = File(...)):
                 # GST Verification (Real Government Data)
                 "gstVerification": gst_verification_results,
                 "gstMissing": gst_missing,
+                
+                # HSN/SAC Verification (Real Government Data)
+                "hsnSacVerification": hsn_sac_verification_results,
+                "hsnSacCodesFound": len(hsn_codes),
+                "hsnSacValid": sum(1 for v in hsn_sac_verification_results if v.get('is_valid')),
+                "hsnSacInvalid": sum(1 for v in hsn_sac_verification_results if not v.get('is_valid')),
+                "hsnSacLineItemsVerification": line_items_verification,
+                "hsnSacRateMismatches": line_items_verification['rate_mismatches'] if line_items_verification else [],
+                "hsnSacRateMismatchCount": line_items_verification['rate_mismatch_count'] if line_items_verification else 0,
                 
                 # Detailed results
                 "gstValidations": compliance_results['gst_validations'],

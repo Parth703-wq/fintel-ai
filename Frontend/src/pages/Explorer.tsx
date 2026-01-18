@@ -97,6 +97,8 @@ const Explorer = () => {
               if (anomaly.anomaly_type === 'INVALID_GST') flags.push('Invalid GST');
               if (anomaly.anomaly_type === 'MISSING_GST') flags.push('Missing GST');
               if (anomaly.anomaly_type === 'GST_VENDOR_MISMATCH') flags.push('GST Mismatch');
+              if (anomaly.anomaly_type === 'INVALID_HSN_SAC') flags.push('Invalid HSN/SAC');
+              if (anomaly.anomaly_type === 'HSN_GST_RATE_MISMATCH') flags.push('HSN Rate Mismatch');
               if (anomaly.anomaly_type === 'UNUSUAL_AMOUNT') flags.push('Price Outlier');
               if (anomaly.anomaly_type === 'HSN_PRICE_DEVIATION') flags.push('HSN Mismatch');
             });
